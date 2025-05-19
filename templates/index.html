@@ -2,135 +2,115 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CAN Monitor</title>
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <title>ERGON - CAN Monitor</title>
+    <script src="https://cdn.socket.io/4.3.2/socket.io.min.js"></script>
     <style>
-        /* Modern and Clean Styling */
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f0f2f5; /* Light grey background */
+            font-family: Arial, sans-serif;
+            background-color: #f1f4f9;
             margin: 0;
+            padding: 0;
+        }
+        header {
+            background-color: black;
+            color: white;
             padding: 20px;
-            color: #333; /* Dark grey text */
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        h2 {
-            color: #2c3e50; /* Dark blue heading */
-            margin-bottom: 20px;
-        }
-
-        #status {
-            background-color: #e7f3fe; /* Light blue background for status */
-            color: #1e88e5; /* Blue text for status */
-            padding: 10px 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-            font-size: 1rem;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-        }
-
-        #status span {
+            font-size: 24px;
             font-weight: bold;
         }
-
-        #status .connected {
-            color: #2ecc71; /* Green for connected status */
+        .container {
+            padding: 20px;
         }
-
-        #status .disconnected {
-            color: #e74c3c; /* Red for disconnected status */
+        .status {
+            font-size: 20px;
+            margin-bottom: 10px;
         }
-
+        .status span {
+            font-weight: bold;
+        }
+        .status .connected {
+            color: green;
+        }
+        .status .disconnected {
+            color: red;
+        }
         table {
-            width: 95%;
+            width: 100%;
             border-collapse: collapse;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-            background-color: #fff;
-            border-radius: 8px;
-            overflow: hidden; /* For rounded corners on table */
+            margin-top: 15px;
         }
-
         th, td {
-            padding: 12px 15px;
-            text-align: left;
-            border-bottom: 1px solid #eee;
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: center;
         }
-
         th {
-            background-color: #34495e; /* Dark blue header */
+            background-color: #003366;
             color: white;
-            font-weight: 500;
         }
-
         tr:nth-child(even) {
-            background-color: #f9f9f9;
-        }
-
-        tr:hover {
-            background-color: #ecf0f1; /* Light grey on hover */
-            transition: background-color 0.3s ease;
-        }
-
-        /* Responsive adjustments */
-        @media (max-width: 768px) {
-            table {
-                width: 100%;
-            }
+            background-color: #f2f2f2;
         }
     </style>
 </head>
 <body>
-    <h2>CAN Monitor</h2>
-    <div id="status">Status: <span class="disconnected">Disconnected</span></div>
-
-    <table id="data-table">
-        <thead>
-            <tr><th>Timestamp</th><th>ID</th><th>Data</th></tr>
-        </thead>
-        <tbody></tbody>
-    </table>
+    <header>ERGON - CAN Monitor</header>
+    <div class="container">
+        <div class="status">Status: <span id="status" class="disconnected">Disconnected</span></div>
+        <div>Total Messages: <span id="message-count">0</span></div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>ID</th>
+                    <th>Data</th>
+                </tr>
+            </thead>
+            <tbody id="message-table">
+            </tbody>
+        </table>
+    </div>
 
     <script>
         const socket = io();
-        const statusEl = document.getElementById('status').getElementsByTagName('span')[0];
-        const statusDiv = document.getElementById('status');
-        const tbody = document.querySelector('#data-table tbody');
 
-        fetch('/status')
-            .then(res => res.json())
-            .then(data => {
-                statusEl.textContent = data.connected ? 'Connected' : 'Disconnected';
-                statusEl.className = data.connected ? 'connected' : 'disconnected';
-            });
+        const statusSpan = document.getElementById('status');
+        const msgCount = document.getElementById('message-count');
+        const table = document.getElementById('message-table');
 
-        socket.on('can_message', msg => {
-            const row = document.createElement('tr');
+        let lastMessageKey = '';
 
-            const timeCell = document.createElement('td');
-            const date = new Date(msg.timestamp * 1000);
-            const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 };
-            timeCell.textContent = date.toLocaleTimeString(undefined, timeOptions);
-            row.appendChild(timeCell);
-
-            const idCell = document.createElement('td');
-            idCell.textContent = "0x" + msg.id.toString(16).toUpperCase();
-            row.appendChild(idCell);
-
-            const dataCell = document.createElement('td');
-            dataCell.textContent = msg.data;
-            row.appendChild(dataCell);
-
-            tbody.prepend(row); // Add new messages to the top
-
-            // Optional: Limit the number of rows displayed for performance
-            const maxRows = 50;
-            if (tbody.rows.length > maxRows) {
-                tbody.deleteRow(maxRows);
+        function updateStatus(isConnected) {
+            if (isConnected) {
+                statusSpan.textContent = 'Connected';
+                statusSpan.className = 'connected';
+            } else {
+                statusSpan.textContent = 'Disconnected';
+                statusSpan.className = 'disconnected';
             }
+        }
+
+        socket.on('connection_status', (data) => {
+            updateStatus(data.status);
+            msgCount.textContent = data.message_count;
+        });
+
+        socket.on('can_message', (msg) => {
+            updateStatus(true); // Auto-update to connected when receiving message
+
+            msgCount.textContent = parseInt(msgCount.textContent) + 1;
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${msg.timestamp}</td>
+                <td>${msg.id}</td>
+                <td>${msg.data}</td>
+            `;
+            table.prepend(row);
+        });
+
+        socket.on('disconnect', () => {
+            updateStatus(false);
         });
     </script>
 </body>
